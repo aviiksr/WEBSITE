@@ -11,7 +11,7 @@ const uploadFile = async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
   try {
-    let fileUrl = `${process.env.FRONTEND_URL?.replace('5173', '5000') || 'http://localhost:5000'}/uploads/${req.file.filename}`;
+    let fileUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/uploads/${req.file.filename}`;
     
     const s3Url = await uploadToS3(req.file);
     if (s3Url) {
