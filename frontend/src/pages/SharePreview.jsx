@@ -12,7 +12,7 @@ const SharePreview = () => {
   useEffect(() => {
     const fetchSharedFile = async () => {
       try {
-        const { data } = await axios.get(`http://127.0.0.1:5000/api/files/shared/${shareId}`);
+        const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/shared/${shareId}`);
         setFileData(data);
       } catch (err) {
         setError(err.response?.data?.message || 'File not found or link expired.');

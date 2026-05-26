@@ -172,3 +172,5 @@ const server = app.listen(PORT, () => {
 });
 server.timeout = 30 * 60 * 1000; // 30 minutes timeout for large file uploads
 // Loaded Gemini AI configurations successfully
+
+module.exports = app;

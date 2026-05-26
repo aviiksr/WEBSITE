@@ -22,7 +22,7 @@ const Dashboard = () => {
 
   const fetchFiles = useCallback(async () => {
     try {
-      const { data } = await axios.get('http://127.0.0.1:5000/api/files', {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       setFiles(data);
@@ -33,7 +33,7 @@ const Dashboard = () => {
 
   const fetchTrash = useCallback(async () => {
     try {
-      const { data } = await axios.get('http://127.0.0.1:5000/api/files/trash', {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/trash`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       setTrashFiles(data);
@@ -44,7 +44,7 @@ const Dashboard = () => {
 
   const fetchActivities = useCallback(async () => {
     try {
-      const { data } = await axios.get('http://127.0.0.1:5000/api/activity', {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/activity`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       setActivities(data);
@@ -80,7 +80,7 @@ const Dashboard = () => {
     setIsUploading(true);
     setUploadProgress(0);
     try {
-      await axios.post('http://127.0.0.1:5000/api/files', formData, {
+      await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files`, formData, {
         headers: { 
           Authorization: `Bearer ${user.token}`,
           'Content-Type': 'multipart/form-data'
@@ -107,7 +107,7 @@ const Dashboard = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Move file to trash?')) {
       try {
-        await axios.delete(`http://127.0.0.1:5000/api/files/${id}`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         fetchFiles();
@@ -120,7 +120,7 @@ const Dashboard = () => {
 
   const handleRestore = async (id) => {
     try {
-      await axios.put(`http://127.0.0.1:5000/api/files/${id}/restore`, {}, {
+      await axios.put(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}/restore`, {}, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       fetchTrash();
@@ -134,7 +134,7 @@ const Dashboard = () => {
   const handlePermanentDelete = async (id) => {
     if (window.confirm('Permanently delete this file? This cannot be undone.')) {
       try {
-        await axios.delete(`http://127.0.0.1:5000/api/files/${id}/permanent`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}/permanent`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         fetchTrash();
@@ -149,7 +149,7 @@ const Dashboard = () => {
     const recipientEmail = window.prompt("Enter an email address to send this file to directly, or leave blank to just get a shareable link:");
     try {
       const payload = recipientEmail ? { recipientEmail } : {};
-      const { data } = await axios.post(`http://127.0.0.1:5000/api/files/${id}/share`, payload, {
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}/share`, payload, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       const link = `${window.location.origin}/share/${data.shareId}`;
@@ -165,7 +165,7 @@ const Dashboard = () => {
 
   const handleFavorite = async (id) => {
     try {
-      await axios.put(`http://127.0.0.1:5000/api/files/${id}/favorite`, {}, {
+      await axios.put(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}/favorite`, {}, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       fetchFiles();
@@ -177,7 +177,7 @@ const Dashboard = () => {
 
   const handleDownloadFile = async (file) => {
     try {
-      const { data } = await axios.get(`http://127.0.0.1:5000/api/files/${file._id}/download`, {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${file._id}/download`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
       if (data.downloadUrl) {

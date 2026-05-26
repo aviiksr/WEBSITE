@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const { data } = await axios.get('http://127.0.0.1:5000/api/auth/profile', {
+          const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/auth/profile`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setUser({ ...data, token });
@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const { data } = await axios.post('http://127.0.0.1:5000/api/auth/login', { email, password });
+    const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/auth/login`, { email, password });
     if (data.otpRequired) {
       return data;
     }
@@ -37,14 +37,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyOtp = async (email, otp) => {
-    const { data } = await axios.post('http://127.0.0.1:5000/api/auth/verify-otp', { email, otp });
+    const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/auth/verify-otp`, { email, otp });
     localStorage.setItem('token', data.token);
     setUser(data);
     return data;
   };
 
   const register = async (name, email, password) => {
-    const { data } = await axios.post('http://127.0.0.1:5000/api/auth/register', { name, email, password });
+    const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/auth/register`, { name, email, password });
     localStorage.setItem('token', data.token);
     setUser(data);
     return data;
