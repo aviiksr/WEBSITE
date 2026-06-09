@@ -1,5 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { useContext } from 'react';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -10,6 +11,12 @@ import Support from './pages/Support';
 import Profile from './pages/Profile';
 
 function Landing() {
+  const { user } = useContext(AuthContext);
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-transparent text-white">
       <Navbar />

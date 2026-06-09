@@ -9,8 +9,8 @@ if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_ap
  * Smart AI/Heuristic categorization of files.
  * Uses Google Gemini API if configured in .env, otherwise falls back to highly robust heuristics.
  */
-const categorizeFile = async (filename, mimeType) => {
-  if (!genAI) {
+const categorizeFile = async (filename, mimeType, skipAI = false) => {
+  if (skipAI || !genAI) {
     return runHeuristicCategorization(filename, mimeType);
   }
 

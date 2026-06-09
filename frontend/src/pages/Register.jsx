@@ -1,9 +1,9 @@
 import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '../components/Navbar';
-import { UserPlus, Mail, Lock, User } from 'lucide-react';
+import { UserPlus, Mail, Lock, User, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 const HUDClock = () => {
   const [time, setTime] = useState(new Date());
@@ -88,21 +88,85 @@ const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300);
 
-  const { register } = useContext(AuthContext);
+  const { register, verifyOtp, login } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!otpRequired) return;
+
+    setTimeLeft(300);
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [otpRequired]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+      try {
+        const data = await register(name, email, password);
+        if (data && data.otpRequired) {
+          // Should not happen under option 2, but keep fallback
+          setOtpRequired(true);
+        } else {
+          // Registration succeeded without OTP – redirect to login page
+          navigate('/login');
+        }
+      } catch (err) {
+        setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    setLoading(true);
     try {
-      await register(name, email, password);
+      const data = await login(email, password);
+      if (data && data.otpRequired) {
+        // This will trigger the useEffect because we can temporarily set it to false then true
+        setOtpRequired(false);
+        setTimeout(() => setOtpRequired(true), 0);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await verifyOtp(email, otp);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(err.response?.data?.message || 'Invalid or expired verification code.');
     } finally {
       setLoading(false);
     }
@@ -114,86 +178,177 @@ const Register = () => {
       <Navbar />
 
       <div className="flex-1 flex items-center justify-center p-4 z-10">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="glass-panel w-full max-w-md p-8 rounded-3xl border border-gray-800"
-        >
-          <HUDClock />
-
-          <h2 className="text-3xl font-extrabold mb-2 text-center gradient-text">Create Account</h2>
-          <p className="text-gray-400 text-sm text-center mb-6">Get started with secure cloud storage.</p>
-
-          {error && (
+        <AnimatePresence mode="wait">
+          {!otpRequired ? (
             <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-red-500/15 border border-red-500/30 text-red-300 p-3.5 rounded-xl mb-5 text-sm"
+              key="registration"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+              className="glass-panel w-full max-w-md p-8 rounded-3xl border border-gray-800"
             >
-              {error}
+              <HUDClock />
+
+              <h2 className="text-3xl font-extrabold mb-2 text-center gradient-text">Create Account</h2>
+              <p className="text-gray-400 text-sm text-center mb-6">Get started with secure cloud storage.</p>
+
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-500/15 border border-red-500/30 text-red-300 p-3.5 rounded-xl mb-5 text-sm"
+                >
+                  {error}
+                </motion.div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
+                    <User size={12} />
+                    <span>Full Name</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Welcome to CloudPro"
+                    className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
+                    <Mail size={12} />
+                    <span>Email Address</span>
+                  </label>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
+                    <Lock size={12} />
+                    <span>Password</span>
+                  </label>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+                    required
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] hover:opacity-90 py-3 rounded-xl font-bold transition mt-6 flex items-center justify-center shadow-lg shadow-indigo-500/10"
+                >
+                  {loading ? 'Creating Account...' : 'Register'}
+                </button>
+              </form>
+
+              <p className="mt-6 text-center text-gray-400 text-sm">
+                Already have an account? <Link to="/login" className="text-indigo-400 hover:underline font-semibold">Login here</Link>
+              </p>
+            </motion.div>
+          ) : (
+            // Phase 2: 2FA OTP verification form
+            <motion.div
+              key="otp-verification"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+              className="glass-panel w-full max-w-md p-8 rounded-3xl border border-gray-800"
+            >
+              <div className="flex justify-center mb-6">
+                <div className="p-3.5 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-400 animate-pulse">
+                  <ShieldCheck size={28} />
+                </div>
+              </div>
+
+              <h2 className="text-3xl font-extrabold mb-2 text-center gradient-text">Verify Identity</h2>
+              <p className="text-gray-400 text-sm text-center mb-6">
+                A 6-digit secure verification OTP was sent to <strong className="text-gray-200">{email}</strong>.
+              </p>
+
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-500/15 border border-red-500/30 text-red-300 p-3.5 rounded-xl mb-5 text-sm"
+                >
+                  {error}
+                </motion.div>
+              )}
+
+              <form onSubmit={handleOtpSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex justify-between select-none">
+                    <span>Verification Code</span>
+                    <span className={`${timeLeft === 0 ? 'text-red-400 font-extrabold animate-pulse' : 'text-indigo-400'}`}>
+                      {timeLeft === 0 ? 'Expired' : `Expires in ${formatTime(timeLeft)}`}
+                    </span>
+                  </label>
+                  <input 
+                    type="text" 
+                    maxLength="6"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} // strictly numeric
+                    placeholder="Enter 6-digit code"
+                    className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3.5 text-center text-xl font-bold tracking-[8px] text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition font-mono animate-pulse"
+                    disabled={timeLeft === 0}
+                    required
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={loading || timeLeft === 0}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-indigo-600 hover:opacity-90 py-3 rounded-xl font-bold transition mt-6 flex items-center justify-center shadow-lg shadow-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Verifying OTP...' : 'Verify & Complete Registration'}
+                </button>
+              </form>
+
+              {timeLeft === 0 && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center mt-5"
+                >
+                  <p className="text-xs text-gray-400">Didn't receive the verification code?</p>
+                  <button 
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition mt-1 underline"
+                  >
+                    Resend New Code
+                  </button>
+                </motion.div>
+              )}
+
+              <button 
+                onClick={() => setOtpRequired(false)}
+                className="mt-6 w-full flex items-center justify-center space-x-2 text-gray-400 hover:text-white transition text-sm"
+              >
+                <ArrowLeft size={16} />
+                <span>Back to Registration</span>
+              </button>
             </motion.div>
           )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
-                <User size={12} />
-                <span>Full Name</span>
-              </label>
-              <input 
-                type="text" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Welcome to CloudPro"
-                className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
-                <Mail size={12} />
-                <span>Email Address</span>
-              </label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center space-x-1.5">
-                <Lock size={12} />
-                <span>Password</span>
-              </label>
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-[var(--color-card)] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
-                required
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] hover:opacity-90 py-3 rounded-xl font-bold transition mt-6 flex items-center justify-center shadow-lg shadow-indigo-500/10"
-            >
-              {loading ? 'Creating Account...' : 'Register'}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-gray-400 text-sm">
-            Already have an account? <Link to="/login" className="text-indigo-400 hover:underline font-semibold">Login here</Link>
-          </p>
-        </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,14 +1,18 @@
-import { useContext, useEffect } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import EditProfileModal from '../components/EditProfileModal';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import { motion } from 'framer-motion';
-import { User, Mail, Calendar, HardDrive, ShieldCheck, Star } from 'lucide-react';
+import { User, Mail, Calendar, HardDrive, ShieldCheck, Star, Check } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 const Profile = () => {
   const { user, loading } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -19,7 +23,8 @@ const Profile = () => {
   if (loading || !user) return <div className="min-h-screen bg-transparent flex items-center justify-center text-white">Loading...</div>;
 
   const totalUsedMB = parseFloat((user.usedStorage / (1024 * 1024)).toFixed(2));
-  const maxStorageMB = 15360; // 15GB limit
+  const maxStorageGB = user?.isPremium ? 100 : 15;
+  const maxStorageMB = maxStorageGB * 1024;
 
   const displayUsed = totalUsedMB >= 1024 
     ? `${(totalUsedMB / 1024).toFixed(2)} GB` 
@@ -55,15 +60,15 @@ const Profile = () => {
             </div>
 
             <h2 className="text-2xl font-bold mb-1">{user.name}</h2>
-            <p className="text-indigo-400 font-medium mb-6 flex items-center space-x-1">
+            <p className={`font-medium mb-6 flex items-center space-x-1 ${user.isPremium ? 'text-emerald-400' : 'text-indigo-400'}`}>
               <ShieldCheck size={16} />
-              <span>Standard User</span>
+              <span>{user.isPremium ? 'Premium User' : 'Standard User'}</span>
             </p>
 
-            <button className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition font-semibold text-sm mb-3">
+            <button onClick={() => setIsEditModalOpen(true)} className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition font-semibold text-sm mb-3">
               Edit Profile
             </button>
-            <button className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition font-semibold text-sm shadow-lg shadow-indigo-500/25">
+            <button onClick={() => setIsPasswordModalOpen(true)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition font-semibold text-sm shadow-lg shadow-indigo-500/25">
               Change Password
             </button>
           </div>
@@ -110,19 +115,33 @@ const Profile = () => {
                   <HardDrive className="text-cyan-400" />
                   <span>Storage Allocation</span>
                 </h3>
-                <p className="text-gray-400 mb-6 text-sm">You are currently using {displayUsed} of your 15 GB free allocation.</p>
+                <p className="text-gray-400 mb-6 text-sm">You are currently using {displayUsed} of your {maxStorageGB} GB allocation.</p>
                 
-                <div className="bg-slate-900/80 rounded-2xl p-5 border border-amber-500/20 relative overflow-hidden group cursor-pointer">
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition duration-500"></div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2 text-amber-400">
-                      <Star size={18} className="animate-pulse" />
-                      <span className="font-bold">Upgrade to Premium</span>
+                {!user.isPremium ? (
+                  <div className="bg-slate-900/80 rounded-2xl p-5 border border-amber-500/20 relative overflow-hidden group cursor-pointer">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition duration-500"></div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2 text-amber-400">
+                        <Star size={18} className="animate-pulse" />
+                        <span className="font-bold">Upgrade to Premium</span>
+                      </div>
+                      <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-1 rounded font-bold">100 GB</span>
                     </div>
-                    <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-1 rounded font-bold">100 GB</span>
+                    <p className="text-xs text-gray-400">Get unlimited speed and massive storage for your files.</p>
                   </div>
-                  <p className="text-xs text-gray-400">Get unlimited speed and massive storage for your files.</p>
-                </div>
+                ) : (
+                  <div className="bg-slate-900/80 rounded-2xl p-5 border border-emerald-500/20 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 opacity-0 group-hover:opacity-100 transition duration-500"></div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2 text-emerald-400">
+                        <Check size={18} className="animate-pulse" />
+                        <span className="font-bold">Premium Active</span>
+                      </div>
+                      <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded font-bold">100 GB</span>
+                    </div>
+                    <p className="text-xs text-gray-400">You have unlimited speed and massive storage for your files.</p>
+                  </div>
+                )}
               </div>
 
               <div className="w-40 h-40 shrink-0 relative flex items-center justify-center">
@@ -156,6 +175,9 @@ const Profile = () => {
           </div>
         </motion.div>
       </main>
+
+      <EditProfileModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} />
+      <ChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
     </div>
   );
 };

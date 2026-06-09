@@ -75,16 +75,7 @@ app.use("/uploads", express.static(uploadsPath));
 // =========================
 // Test MongoDB Schema
 // =========================
-const TestSchema = new mongoose.Schema({
-  name: String,
-  email: String,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
-
-const TestUser = mongoose.model("TestUser", TestSchema);
+const User = require('./models/User');
 
 // =========================
 // API Routes
@@ -93,6 +84,7 @@ app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/files", require("./routes/fileRoutes"));
 app.use("/api/activity", require("./routes/activityRoutes"));
 app.use("/api/support", require("./routes/supportRoutes"));
+app.use("/api/payment", require("./routes/paymentRoutes"));
 
 // =========================
 // Home Route
@@ -131,7 +123,7 @@ app.get("/test-db", async (req, res) => {
 // =========================
 app.get("/all-users", async (req, res) => {
   try {
-    const users = await TestUser.find();
+    const users = await User.find();
 
     res.status(200).json({
       success: true,
@@ -174,3 +166,5 @@ server.timeout = 30 * 60 * 1000; // 30 minutes timeout for large file uploads
 // Loaded Gemini AI configurations successfully
 
 module.exports = app;
+// Trigger restart for new env vars
+// Restart again

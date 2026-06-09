@@ -122,6 +122,7 @@ const sendShareNotification = async (fileOwner, filename, shareUrl, recipientEma
 const sendSupportTicketEmail = async (ticket) => {
   if (!transporter) return;
   try {
+    // 1. Send confirmation to the user
     const info = await transporter.sendMail({
       from: getSenderEmail('CloudPro Support'),
       to: ticket.email,
@@ -133,6 +134,19 @@ const sendSupportTicketEmail = async (ticket) => {
     console.log('Support Ticket confirmation email sent: %s', info.messageId);
     if (!process.env.SMTP_USER) {
       console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    }
+
+    // 2. Send notification alert to Admin
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'admin@cloudpro.com';
+    if (adminEmail) {
+      const adminInfo = await transporter.sendMail({
+        from: getSenderEmail('CloudPro System'),
+        to: adminEmail,
+        subject: `[ACTION REQUIRED] New Support Ticket: ${ticket.subject} [#${ticket._id.toString().slice(-6).toUpperCase()}]`,
+        text: `Admin Alert: A new support ticket has been submitted.\n\nUser: ${ticket.name} (${ticket.email})\nTicket ID: #${ticket._id.toString().slice(-6).toUpperCase()}\nType: ${ticket.type}\nSubject: ${ticket.subject}\nDescription: ${ticket.description}\n\nPlease check the admin dashboard to process this ticket.`,
+        html: `<h2>New Support Ticket Received</h2><p><b>User:</b> ${ticket.name} (${ticket.email})</p><p><b>Ticket ID:</b> #${ticket._id.toString().slice(-6).toUpperCase()}</p><p><b>Type:</b> ${ticket.type}</p><p><b>Subject:</b> ${ticket.subject}</p><p><b>Description:</b><br>${ticket.description}</p><p>Please process this ticket.</p>`,
+      });
+      console.log('Support Ticket Admin Alert sent: %s', adminInfo.messageId);
     }
   } catch (error) {
     console.error('Error sending support ticket email:', error);

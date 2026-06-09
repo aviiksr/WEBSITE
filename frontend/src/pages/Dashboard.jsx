@@ -1,15 +1,16 @@
-import { useContext, useEffect, useState, useCallback } from 'react';
+import { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import PremiumModal from '../components/PremiumModal';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UploadCloud, File, Trash2, Share2, Download, X, FileText, Video, Music, Code, Archive, Folder, Clock, Users, Star } from 'lucide-react';
+import { UploadCloud, File, Trash2, Share2, Download, X, FileText, Video, Music, Code, Archive, Folder, Clock, Users, Star, ArrowLeft, Plus, FolderPlus, ChevronDown, CheckSquare, Square, RefreshCw } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const Dashboard = () => {
-  const { user, loading } = useContext(AuthContext);
+  const { user, loading, fetchProfile } = useContext(AuthContext);
   const navigate = useNavigate();
   const [files, setFiles] = useState([]);
   const [trashFiles, setTrashFiles] = useState([]);
@@ -19,6 +20,50 @@ const Dashboard = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  
+  // New File/Folder state
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [showNewTextModal, setShowNewTextModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileContent, setNewFileContent] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const [contextMenu, setContextMenu] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [displayLimit, setDisplayLimit] = useState(50);
+  const selectedFilesSet = new Set(selectedFiles);
+
+  // Upload Modal State
+  const [pendingUploadFiles, setPendingUploadFiles] = useState([]);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showUploadConfigModal, setShowUploadConfigModal] = useState(false);
+  const [targetFolderForUpload, setTargetFolderForUpload] = useState('');
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+  const [isCreatingNewFolder, setIsCreatingNewFolder] = useState(false);
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Close menu when clicking outside (simple approach: hide when clicking on main container)
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowNewMenu(false);
+      setContextMenu(null);
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setSelectedCategory(null);
+    setSelectedFiles([]);
+    setDisplayLimit(50);
+  }, [activeTab]);
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -70,39 +115,172 @@ const Dashboard = () => {
     }
   }, [user, activeTab, fetchFiles, fetchTrash, fetchActivities]);
 
-  const onDrop = useCallback(async (acceptedFiles) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const onDrop = (acceptedFiles) => {
+    if (!acceptedFiles.length) return;
+    confirmUpload(acceptedFiles, selectedCategory || '');
+  };
 
-    const formData = new FormData();
-    formData.append('file', file);
+  const { getRootProps: getRootPropsMain, getInputProps: getInputPropsMain, isDragActive } = useDropzone({ onDrop });
 
+  const folderInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const handleManualUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    
+    e.target.value = null; // reset so it triggers again for the same file
+    setPendingUploadFiles(files);
+    setTargetFolderForUpload(selectedCategory || '');
+    setIsCreatingNewFolder(false);
+    setShowUploadConfigModal(true);
+  };
+
+  const confirmUpload = async (filesToUpload, targetCategoryStr) => {
+    setPendingUploadFiles(filesToUpload);
+    setShowUploadModal(true);
     setIsUploading(true);
     setUploadProgress(0);
-    try {
-      await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files`, formData, {
-        headers: { 
-          Authorization: `Bearer ${user.token}`,
-          'Content-Type': 'multipart/form-data'
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
+    let completed = 0;
+    let targetCategory = targetCategoryStr.trim();
+    if (targetCategory === 'Uncategorized' || targetCategory === 'Uncategorized (Root)') {
+      targetCategory = '';
+    }
+    
+    const batchSize = 4;
+    for (let i = 0; i < filesToUpload.length; i += batchSize) {
+      const batch = filesToUpload.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        let finalCategory = targetCategory;
+        
+        if (file.webkitRelativePath) {
+          const parts = file.webkitRelativePath.split('/');
+          if (parts.length > 1) {
+            const rootFolder = parts[0];
+            if (finalCategory) {
+              finalCategory = `${finalCategory}/${rootFolder}`;
+            } else {
+              finalCategory = rootFolder;
+            }
+          }
         }
-      });
+        
+        if (!finalCategory) {
+          finalCategory = 'Uncategorized';
+        }
+        
+        formData.append('category', finalCategory);
+
+        try {
+          await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files`, formData, {
+            headers: { 
+              Authorization: `Bearer ${user.token}`,
+              'Content-Type': 'multipart/form-data'
+            },
+            onUploadProgress: (progressEvent) => {
+              if (filesToUpload.length === 1) {
+                const filePercent = (progressEvent.loaded / progressEvent.total);
+                const totalPercent = Math.round(((completed + filePercent) * 100) / filesToUpload.length);
+                setUploadProgress(totalPercent);
+              }
+            }
+          });
+        } catch (err) {
+          console.error(err);
+        }
+        completed++;
+        setUploadProgress(Math.round((completed * 100) / filesToUpload.length));
+      }));
+    }
+    
+    setTimeout(() => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setShowUploadModal(false);
+      setPendingUploadFiles([]);
       fetchFiles();
       fetchActivities();
+      fetchProfile();
+      if (filesToUpload.length > 1) {
+        showToast(`${filesToUpload.length} items uploaded successfully!`);
+      } else {
+        showToast(`Item uploaded successfully!`);
+      }
+    }, 500);
+  };
+
+  const handleMoveFile = async (fileId, newCategory) => {
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${fileId}`, 
+        { category: newCategory },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+      fetchFiles();
+      showToast(`Moved to ${newCategory}`);
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to move file');
+    }
+  };
+
+  const handleCreateFolder = async (e) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/category`, { categoryName: newFolderName }, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      // Update local user object to include new category
+      const updatedUser = { ...user, customCategories: [...(user.customCategories || []), newFolderName] };
+      // Note: we'd ideally use setUser from context, but mutating locally for quick UI update works if we just want it to show
+      if (user.customCategories && !user.customCategories.includes(newFolderName)) {
+        user.customCategories.push(newFolderName);
+      } else if (!user.customCategories) {
+        user.customCategories = [newFolderName];
+      }
+      setShowNewFolderModal(false);
+      fetchActivities();
+      showToast(`Folder '${newFolderName}' created successfully`);
+      setNewFolderName('');
     } catch (err) {
       console.error(err);
-    } finally {
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1000);
+      alert('Failed to create folder');
     }
-  }, [user, fetchFiles, fetchActivities]);
+  };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const handleCreateTextFile = async (e) => {
+    e.preventDefault();
+    if (!newFileName.trim()) return;
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/text`, { 
+        filename: newFileName, 
+        content: newFileContent,
+        category: selectedCategory || 'Documents' 
+      }, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      setShowNewTextModal(false);
+      setNewFileName('');
+      setNewFileContent('');
+      fetchFiles();
+      fetchActivities();
+      fetchProfile();
+      const newFile = response.data;
+      showToast(`Text file created successfully in ${newFile.category || 'Documents'} folder`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create text file');
+    }
+  };
+
+  const handleContextMenu = (e, file) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, file });
+  };
 
   const handleDelete = async (id) => {
     if (window.confirm('Move file to trash?')) {
@@ -112,6 +290,7 @@ const Dashboard = () => {
         });
         fetchFiles();
         fetchActivities();
+        fetchProfile();
       } catch (err) {
         console.error(err);
       }
@@ -125,6 +304,7 @@ const Dashboard = () => {
       });
       fetchTrash();
       fetchActivities();
+      fetchProfile();
       alert('File restored successfully!');
     } catch (err) {
       console.error(err);
@@ -139,8 +319,78 @@ const Dashboard = () => {
         });
         fetchTrash();
         fetchActivities();
+        fetchProfile();
       } catch (err) {
         console.error(err);
+      }
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (window.confirm(`Move ${selectedFiles.length} files to trash?`)) {
+      try {
+        await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/bulk-delete`, { fileIds: selectedFiles }, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        setSelectedFiles([]);
+        fetchFiles();
+        fetchActivities();
+        fetchProfile();
+      } catch (err) {
+        console.error(err);
+        alert('Some files failed to delete. Check console.');
+      }
+    }
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (window.confirm(`Permanently delete ${selectedFiles.length} files? This cannot be undone.`)) {
+      try {
+        await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/bulk-permanent-delete`, { fileIds: selectedFiles }, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        setSelectedFiles([]);
+        fetchTrash();
+        fetchActivities();
+        fetchProfile();
+      } catch (err) {
+        console.error(err);
+        alert('Some files failed to delete permanently.');
+      }
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (window.confirm(`Restore ${selectedFiles.length} files to their original location?`)) {
+      try {
+        await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/bulk-restore`, { fileIds: selectedFiles }, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        setSelectedFiles([]);
+        fetchTrash();
+        fetchFiles();
+        fetchActivities();
+        fetchProfile();
+      } catch (err) {
+        console.error(err);
+        alert('Some files failed to restore.');
+      }
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (window.confirm(`Permanently delete ALL files in trash? This cannot be undone.`)) {
+      try {
+        await axios.delete(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/empty-trash`, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+        setSelectedFiles([]);
+        fetchTrash();
+        fetchActivities();
+        fetchProfile();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to empty trash completely.');
       }
     }
   };
@@ -196,7 +446,8 @@ const Dashboard = () => {
   if (loading || !user) return <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center text-white">Loading...</div>;
 
   const totalUsedMB = parseFloat((user.usedStorage / (1024 * 1024)).toFixed(2));
-  const maxStorageMB = 15360; // 15GB limit
+  const maxStorageGB = user?.isPremium ? 100 : 15;
+  const maxStorageMB = maxStorageGB * 1024;
 
   const displayUsed = totalUsedMB >= 1024 
     ? `${(totalUsedMB / 1024).toFixed(2)} GB` 
@@ -213,6 +464,13 @@ const Dashboard = () => {
     acc[cat] = (acc[cat] || 0) + 1;
     return acc;
   }, {});
+  
+  // Combine custom categories from user with those from files
+  const allCategories = new Set(Object.keys(categoryCount));
+  if (user?.customCategories) {
+    user.customCategories.forEach(cat => allCategories.add(cat));
+  }
+  const folderList = Array.from(allCategories).sort();
   
   const barChartData = Object.keys(categoryCount).map(key => ({
     name: key,
@@ -258,7 +516,7 @@ const Dashboard = () => {
     if (mime.startsWith('image/')) {
       return (
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-700 bg-slate-800 flex items-center justify-center shrink-0 shadow-md">
-          <img src={file.url} alt={file.originalName} className="w-full h-full object-cover" />
+          <img src={file.url} alt={file.originalName} className="w-full h-full object-cover" loading="lazy" />
         </div>
       );
     }
@@ -386,6 +644,92 @@ const Dashboard = () => {
     );
   };
 
+  const toggleSelection = (e, fileId) => {
+    e.stopPropagation();
+    setSelectedFiles(prev => prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]);
+  };
+
+  const renderFileCard = (file) => {
+    const isSelected = selectedFilesSet.has(file._id);
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        key={file._id} 
+        draggable={true}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('fileId', file._id);
+        }}
+        className={`relative bg-[var(--color-card)] p-4 rounded-xl border transition group cursor-pointer ${isSelected ? 'border-indigo-500 bg-indigo-500/10' : 'border-gray-700 hover:border-gray-500'}`}
+        onClick={() => {
+          if (selectedFiles.length > 0) {
+            toggleSelection({ stopPropagation: () => {} }, file._id);
+          } else {
+            setPreviewFile(file);
+          }
+        }}
+        onContextMenu={(e) => handleContextMenu(e, file)}
+      >
+        <button 
+          onClick={(e) => toggleSelection(e, file._id)}
+          className={`absolute top-3 right-3 z-10 transition ${isSelected ? 'text-indigo-400 opacity-100' : 'text-gray-500 opacity-0 group-hover:opacity-100'}`}
+        >
+          {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+        </button>
+        <div className="flex items-center space-x-3 mb-4 mt-2">
+        {getFileIcon(file)}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold truncate" title={file.originalName}>{file.originalName}</p>
+          <div className="flex items-center space-x-2 mt-1">
+            <span className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB</span>
+            <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full">{file.category || 'Others'}</span>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-1 flex items-center">
+            <Clock size={10} className="mr-1" />
+            {new Date(file.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+          </p>
+        </div>
+      </div>
+      {file.tags && file.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {file.tags.map((tag, i) => (
+            <span key={i} className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 font-mono">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+        {activeTab !== 'trash' ? (
+          <>
+            <button onClick={() => handleDownloadFile(file)} className="text-gray-400 hover:text-white transition" title="Download">
+              <Download size={18} />
+            </button>
+            <button onClick={() => handleShare(file._id)} className="text-gray-400 hover:text-emerald-400 transition" title="Share">
+              <Share2 size={18} />
+            </button>
+            <button onClick={() => handleFavorite(file._id)} className={`${file.isFavorite ? 'text-amber-400' : 'text-gray-400'} hover:text-amber-300 transition`} title="Favorite">
+              <Star size={18} fill={file.isFavorite ? 'currentColor' : 'none'} />
+            </button>
+            <button onClick={() => handleDelete(file._id)} className="text-gray-400 hover:text-red-400 transition" title="Delete">
+              <Trash2 size={18} />
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => handleRestore(file._id)} className="text-gray-400 hover:text-green-400 transition flex items-center" title="Restore">
+              <RefreshCw size={18} className="mr-1" /> <span className="text-xs">Restore</span>
+            </button>
+            <button onClick={() => handlePermanentDelete(file._id)} className="text-gray-400 hover:text-red-500 transition flex items-center" title="Delete Forever">
+              <Trash2 size={18} className="mr-1" /> <span className="text-xs">Delete Forever</span>
+            </button>
+          </>
+        )}
+      </div>
+    </motion.div>
+    );
+  };
+
   const getFilteredFiles = () => {
     if (activeTab === 'trash') return trashFiles;
     
@@ -406,15 +750,109 @@ const Dashboard = () => {
   const currentFiles = getFilteredFiles();
 
   return (
-    <div className="min-h-screen bg-transparent text-white relative overflow-hidden">
+    <div className="min-h-screen bg-transparent text-white relative">
+      <input 
+        type="file" 
+        multiple 
+        ref={fileInputRef} 
+        className="hidden" 
+        onChange={handleManualUpload} 
+      />
+      <input 
+        type="file" 
+        webkitdirectory="true" 
+        directory="true"
+        ref={folderInputRef} 
+        className="hidden" 
+        onChange={handleManualUpload} 
+      />
 
       <Navbar />
       <div className="container mx-auto p-6 flex flex-col lg:flex-row gap-6 relative z-10">
         
         {/* Sidebar */}
         <aside className="w-full lg:w-1/4 space-y-6">
-          <div className="glass-panel p-6 rounded-2xl sticky top-24">
+          <div className="glass-panel p-6 rounded-2xl sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
             {/* Menu Bar / Navigation */}
+            <div className="mb-6 relative" onClick={(e) => e.stopPropagation()}>
+              <button 
+                onClick={() => setShowNewMenu(!showNewMenu)}
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center justify-center space-x-2 transition shadow-lg shadow-indigo-600/30"
+              >
+                <Plus size={20} />
+                <span>New</span>
+                <ChevronDown size={16} />
+              </button>
+              
+              <AnimatePresence>
+                {showNewMenu && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50"
+                  >
+                    <button 
+                      onClick={() => { setShowNewFolderModal(true); setShowNewMenu(false); }}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition"
+                    >
+                      <FolderPlus size={18} className="text-gray-400" />
+                      <span>New Folder</span>
+                    </button>
+                    <button 
+                      onClick={() => { setShowNewTextModal(true); setShowNewMenu(false); }}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition border-t border-slate-700"
+                    >
+                      <FileText size={18} className="text-gray-400" />
+                      <span>New Text File</span>
+                    </button>
+                    <div className="border-t border-slate-700">
+                      <button 
+                        className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowNewMenu(false);
+                          folderInputRef.current?.click();
+                        }}
+                      >
+                        <FolderPlus size={18} className="text-gray-400" />
+                        <span>Folder Upload</span>
+                      </button>
+                      <button 
+                        className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition cursor-pointer border-t border-slate-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowNewMenu(false);
+                          fileInputRef.current?.click();
+                        }}
+                      >
+                        <UploadCloud size={18} className="text-gray-400" />
+                        <span>File Upload</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Hidden File Inputs for Menu */}
+              <input 
+                type="file" 
+                ref={folderInputRef} 
+                style={{ display: 'none' }} 
+                webkitdirectory="true" 
+                directory="true" 
+                multiple 
+                onChange={handleManualUpload} 
+              />
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                multiple 
+                onChange={handleManualUpload} 
+              />
+            </div>
+
             <nav className="mb-8 space-y-1">
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 px-2">Menu</h3>
               <button 
@@ -456,7 +894,7 @@ const Dashboard = () => {
 
             <h3 className="text-xl font-semibold mb-4 px-2">Storage Usage</h3>
             <div className="h-48 w-full mb-4">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={192} minWidth={0}>
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -476,21 +914,23 @@ const Dashboard = () => {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-center text-gray-300 font-medium mb-3">{displayUsed} / 15 GB used</p>
-            <button 
-              onClick={() => setShowPremiumModal(true)} 
-              className="w-full py-2.5 mb-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm transition shadow-lg shadow-orange-500/20 active:scale-95"
-            >
-              👑 Get 100 GB - Buy Premium
-            </button>
+            <p className="text-center text-gray-300 font-medium mb-3">{displayUsed} / {maxStorageGB} GB used</p>
+            {!user?.isPremium && (
+              <button 
+                onClick={() => setShowPremiumModal(true)} 
+                className="w-full py-2.5 mb-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm transition shadow-lg shadow-orange-500/20 active:scale-95"
+              >
+                👑 Get 100 GB - Buy Premium
+              </button>
+            )}
             
             <div 
-              {...getRootProps()} 
+              {...getRootPropsMain()} 
               className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                 isDragActive ? 'border-[var(--color-primary)] bg-indigo-500/10' : 'border-gray-600 hover:border-gray-400'
               }`}
             >
-              <input {...getInputProps()} />
+              <input {...getInputPropsMain()} />
               <UploadCloud size={36} className="mx-auto mb-3 text-[var(--color-primary)]" />
               {isUploading ? (
                 <div className="w-full">
@@ -510,7 +950,60 @@ const Dashboard = () => {
 
         <main className="w-full lg:w-3/4">
           <div className="glass-panel p-6 rounded-2xl min-h-[500px]">
-            <h2 className="text-2xl font-bold mb-6 capitalize">{activeTab === 'files' ? 'My Files' : activeTab === 'trash' ? 'Trash Box' : activeTab}</h2>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+              <h2 className="text-2xl font-bold capitalize">
+                {activeTab === 'files' && selectedCategory ? (
+                  <div className="flex items-center">
+                    <button onClick={() => setSelectedCategory(null)} className="mr-3 text-gray-400 hover:text-white transition">
+                      <ArrowLeft size={24} />
+                    </button>
+                    {selectedCategory}
+                  </div>
+                ) : (
+                  activeTab === 'files' ? 'My Files' : activeTab === 'trash' ? 'Trash Box' : activeTab
+                )}
+              </h2>
+              {currentFiles.length > 0 && (
+                <div className="flex items-center space-x-3">
+                  {selectedFiles.length > 0 ? (
+                    <>
+                      <span className="text-sm font-medium text-indigo-300">{selectedFiles.length} selected</span>
+                      {activeTab === 'trash' ? (
+                        <>
+                          <button onClick={handleBulkRestore} className="bg-green-500/20 text-green-400 hover:bg-green-500/30 px-3 py-1.5 rounded-lg transition text-sm font-medium flex items-center">
+                            <RefreshCw size={16} className="mr-1.5" /> Restore
+                          </button>
+                          <button onClick={handleBulkPermanentDelete} className="bg-red-500/20 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded-lg transition text-sm font-medium flex items-center">
+                            <Trash2 size={16} className="mr-1.5" /> Delete Forever
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={handleBulkDelete} className="bg-red-500/20 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded-lg transition text-sm font-medium flex items-center">
+                          <Trash2 size={16} className="mr-1.5" /> Delete
+                        </button>
+                      )}
+                      <button onClick={() => setSelectedFiles([])} className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition text-sm font-medium text-white">
+                        Clear
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {activeTab === 'trash' && (
+                        <button onClick={handleEmptyTrash} className="bg-red-500/20 text-red-400 hover:bg-red-500/30 px-4 py-1.5 rounded-lg transition text-sm font-medium flex items-center mr-3">
+                          Empty Trash
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => setSelectedFiles(currentFiles.map(f => f._id))} 
+                        className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 px-4 py-1.5 rounded-lg transition text-sm font-medium flex items-center"
+                      >
+                        <CheckSquare size={16} className="mr-1.5" /> Select All
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             
             {activeTab === 'trash' && currentFiles.length === 0 && (
               <div className="text-center py-20 text-gray-400">
@@ -526,66 +1019,88 @@ const Dashboard = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {currentFiles.map((file) => (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  key={file._id} 
-                  className="bg-[var(--color-card)] p-4 rounded-xl border border-gray-700 hover:border-gray-500 transition group cursor-pointer"
-                  onClick={() => setPreviewFile(file)}
-                >
-                  <div className="flex items-center space-x-3 mb-4">
-                    {getFileIcon(file)}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold truncate" title={file.originalName}>{file.originalName}</p>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB</span>
-                        <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full">{file.category || 'Others'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {file.tags && file.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {file.tags.map((tag, i) => (
-                        <span key={i} className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 font-mono">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+            {activeTab === 'files' && selectedCategory === null ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+                  {folderList.filter(c => c !== 'Uncategorized').map(category => {
+                    const categoryFiles = currentFiles.filter(f => (f.category || 'Others') === category);
+                    const categoryImages = categoryFiles.filter(f => f.mimeType && f.mimeType.startsWith('image/')).slice(0, 3);
                     
-                    {activeTab !== 'trash' ? (
-                      <>
-                        <button onClick={() => handleDownloadFile(file)} className="text-gray-400 hover:text-white transition" title="Download">
-                          <Download size={18} />
-                        </button>
-                        <button onClick={() => handleShare(file._id)} className="text-gray-400 hover:text-emerald-400 transition" title="Share">
-                          <Share2 size={18} />
-                        </button>
-                        <button onClick={() => handleFavorite(file._id)} className={`${file.isFavorite ? 'text-amber-400' : 'text-gray-400'} hover:text-amber-300 transition`} title="Favorite">
-                          <Star size={18} fill={file.isFavorite ? 'currentColor' : 'none'} />
-                        </button>
-                        <button onClick={() => handleDelete(file._id)} className="text-gray-400 hover:text-red-400 transition" title="Delete">
-                          <Trash2 size={18} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => handleRestore(file._id)} className="text-gray-400 hover:text-emerald-400 transition flex items-center space-x-1" title="Restore">
-                          <span className="text-xs font-semibold">Restore</span>
-                        </button>
-                        <button onClick={() => handlePermanentDelete(file._id)} className="text-gray-400 hover:text-red-500 transition flex items-center space-x-1" title="Delete Permanently">
-                          <Trash2 size={18} />
-                        </button>
-                      </>
-                    )}
+                    return (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        key={category} 
+                        onClick={() => setSelectedCategory(category)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          const fileId = e.dataTransfer.getData('fileId');
+                          if (fileId) {
+                            await handleMoveFile(fileId, category);
+                          }
+                        }}
+                        className="bg-[var(--color-card)] p-5 rounded-xl border border-gray-700 hover:border-indigo-500 cursor-pointer flex flex-col items-center text-center transition group shadow-lg hover:shadow-indigo-500/20"
+                      >
+                        {categoryImages.length > 0 ? (
+                          <div className="relative w-16 h-14 mb-2 mt-1 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                            {categoryImages.map((img, i) => (
+                              <div 
+                                key={img._id} 
+                                className="absolute rounded-lg shadow-md border border-gray-600 overflow-hidden bg-slate-800"
+                                style={{
+                                  width: '42px',
+                                  height: '42px',
+                                  zIndex: i,
+                                  transform: `translateX(${(i - 1) * 8}px) translateY(${(1 - i) * 4}px) rotate(${(i - 1) * 6}deg)`
+                                }}
+                              >
+                                <img src={img.url} alt="preview" className="w-full h-full object-cover" />
+                              </div>
+                            ))}
+                            <div className="absolute -bottom-1 -right-2 bg-slate-800 rounded-full p-1 shadow-md border border-gray-600 z-10 text-indigo-400">
+                              <Folder size={12} fill="currentColor" className="opacity-80" />
+                            </div>
+                          </div>
+                        ) : (
+                          <Folder size={48} className="text-indigo-400 group-hover:text-indigo-300 mb-3" />
+                        )}
+                        <h4 className="font-bold text-gray-100">{category}</h4>
+                        <p className="text-xs text-gray-400 mt-1">{categoryCount[category] || 0} {(categoryCount[category] || 0) === 1 ? 'file' : 'files'}</p>
+                      </motion.div>
+                    );
+                  })}
+                </div>
 
+                {currentFiles.length > 0 && (
+                  <>
+                    <h3 className="text-xl font-bold mb-4 px-2 mt-8">All Files</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {currentFiles.slice(0, displayLimit).map(renderFileCard)}
+                    </div>
+                    {currentFiles.length > displayLimit && (
+                      <div className="flex justify-center mt-6">
+                        <button onClick={() => setDisplayLimit(prev => prev + 50)} className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 px-6 py-2 rounded-lg transition font-medium border border-indigo-500/30">Load More</button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {currentFiles
+                    .filter(file => activeTab === 'files' && selectedCategory ? (file.category || 'Others') === selectedCategory : true)
+                    .slice(0, displayLimit)
+                    .map(renderFileCard)}
+                </div>
+                {currentFiles.filter(file => activeTab === 'files' && selectedCategory ? (file.category || 'Others') === selectedCategory : true).length > displayLimit && (
+                  <div className="flex justify-center mt-6">
+                    <button onClick={() => setDisplayLimit(prev => prev + 50)} className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 px-6 py-2 rounded-lg transition font-medium border border-indigo-500/30">Load More</button>
                   </div>
-                </motion.div>
-              ))}
-            </div>
+                )}
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -594,7 +1109,7 @@ const Dashboard = () => {
               <h3 className="text-xl font-semibold mb-4">File Categories</h3>
               {barChartData.length > 0 ? (
                 <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={256} minWidth={0}>
                     <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                       <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
@@ -632,6 +1147,44 @@ const Dashboard = () => {
         </main>
       </div>
 
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="fixed bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-[200] w-48"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {activeTab !== 'trash' ? (
+              <button 
+                onClick={() => {
+                  setContextMenu(null);
+                  handleDelete(contextMenu.file._id);
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition text-red-400"
+              >
+                <Trash2 size={18} />
+                <span>Delete</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => {
+                  setContextMenu(null);
+                  handlePermanentDelete(contextMenu.file._id);
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center space-x-3 transition text-red-500"
+              >
+                <Trash2 size={18} />
+                <span>Delete Forever</span>
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* File Preview Modal */}
       <AnimatePresence>
         {previewFile && (
@@ -666,75 +1219,262 @@ const Dashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* Premium Subscription Modal */}
+      {/* New Folder Modal */}
       <AnimatePresence>
-        {showPremiumModal && (
+        {showNewFolderModal && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-            onClick={() => setShowPremiumModal(false)}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setShowNewFolderModal(false)}
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-md w-full bg-slate-900 border border-amber-500/30 p-8 rounded-3xl text-center shadow-2xl overflow-hidden"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-md bg-[var(--color-card)] border border-gray-700 p-6 rounded-2xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Premium Glow effect */}
-              <div className="absolute -top-24 -left-24 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
-              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-orange-500/20 rounded-full blur-3xl pointer-events-none"></div>
-
-              <button 
-                className="absolute top-4 right-4 text-gray-400 hover:text-white transition"
-                onClick={() => setShowPremiumModal(false)}
-              >
-                <X size={24} />
-              </button>
-              
-              <div className="inline-block p-4 bg-amber-500/10 rounded-full text-amber-500 mb-4 animate-pulse">
-                <span className="text-3xl">👑</span>
-              </div>
-              
-              <h2 className="text-3xl font-extrabold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent mb-2">CloudPro Premium</h2>
-              <p className="text-gray-400 text-sm mb-6">Unlock massive storage and high performance features</p>
-              
-              <div className="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-left font-semibold text-lg text-white">Premium Tier</span>
-                  <span className="text-right font-extrabold text-2xl text-amber-400">$9.99<span className="text-xs text-gray-400 font-normal">/mo</span></span>
+              <h3 className="text-xl font-bold mb-4 flex items-center">
+                <FolderPlus className="mr-2 text-indigo-400" /> New Folder
+              </h3>
+              <form onSubmit={handleCreateFolder}>
+                <input 
+                  type="text" 
+                  autoFocus
+                  placeholder="Folder Name (e.g. 202504_)" 
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white mb-4 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+                <div className="flex justify-end space-x-3">
+                  <button type="button" onClick={() => setShowNewFolderModal(false)} className="px-4 py-2 rounded-lg text-gray-300 hover:bg-slate-800 transition">Cancel</button>
+                  <button type="submit" disabled={!newFolderName.trim()} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">Create</button>
                 </div>
-                <hr className="border-slate-700 my-3" />
-                <ul className="text-left space-y-3 text-sm text-gray-300">
-                  <li className="flex items-center">
-                    <span className="text-amber-500 mr-2 font-bold">✓</span>
-                    <span><strong>100 GB</strong> High-speed Cloud Storage</span>
-                  </li>
-                  <li className="flex items-center">
-                    <span className="text-amber-500 mr-2 font-bold">✓</span>
-                    <span><strong>Uncapped</strong> download & upload speeds</span>
-                  </li>
-                  <li className="flex items-center">
-                    <span className="text-amber-500 mr-2 font-bold">✓</span>
-                    <span><strong>True AI</strong> semantic categorization</span>
-                  </li>
-                  <li className="flex items-center">
-                    <span className="text-amber-500 mr-2 font-bold">✓</span>
-                    <span><strong>Priority 24/7</strong> dedicated customer support</span>
-                  </li>
-                </ul>
-              </div>
-
-              <button 
-                onClick={() => alert("Subscription API integration coming soon! Secure checkout will process via Stripe.")}
-                className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-2xl transition shadow-lg shadow-orange-500/30 active:scale-95 mb-3"
-              >
-                Buy Premium Subscription
-              </button>
-              <p className="text-xs text-gray-500">Cancel anytime. 7-day money-back guarantee.</p>
+              </form>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* New Text File Modal */}
+      <AnimatePresence>
+        {showNewTextModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setShowNewTextModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-2xl bg-[var(--color-card)] border border-gray-700 p-6 rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold mb-4 flex items-center">
+                <FileText className="mr-2 text-indigo-400" /> New Text File
+              </h3>
+              <form onSubmit={handleCreateTextFile}>
+                <input 
+                  type="text" 
+                  autoFocus
+                  placeholder="Filename (e.g. notes.txt)" 
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white mb-4 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+                <textarea 
+                  placeholder="Start typing your content here..." 
+                  value={newFileContent}
+                  onChange={(e) => setNewFileContent(e.target.value)}
+                  rows={10}
+                  className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white mb-4 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none font-mono text-sm"
+                />
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">
+                    {selectedCategory ? `Will be saved in: ${selectedCategory}` : 'Will be saved in: Documents (or auto-categorized)'}
+                  </span>
+                  <div className="flex justify-end space-x-3">
+                    <button type="button" onClick={() => setShowNewTextModal(false)} className="px-4 py-2 rounded-lg text-gray-300 hover:bg-slate-800 transition">Cancel</button>
+                    <button type="submit" disabled={!newFileName.trim()} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">Save File</button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Upload Configuration Modal */}
+      <AnimatePresence>
+        {showUploadConfigModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[var(--color-card)] border border-gray-700 p-6 rounded-2xl shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold flex items-center"><UploadCloud className="mr-2 text-indigo-400" /> Upload Options</h3>
+                <button onClick={() => { setShowUploadConfigModal(false); setPendingUploadFiles([]); }} className="text-gray-400 hover:text-white transition"><X size={24} /></button>
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-400 mb-2">Target Folder</label>
+                <div className="relative">
+                  <div className="flex items-center w-full bg-slate-900 border border-slate-700 rounded-xl overflow-hidden focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition">
+                    <FolderPlus className="text-gray-400 ml-4 shrink-0" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Type or select a folder..." 
+                      value={targetFolderForUpload}
+                      onChange={(e) => {
+                        setTargetFolderForUpload(e.target.value);
+                        setShowFolderDropdown(true);
+                      }}
+                      onFocus={() => setShowFolderDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowFolderDropdown(false), 200)}
+                      className="w-full bg-transparent text-white px-3 py-3 focus:outline-none"
+                    />
+                    <button 
+                      onClick={() => setShowFolderDropdown(!showFolderDropdown)} 
+                      className="px-3 py-3 text-gray-400 hover:text-white bg-slate-800 border-l border-slate-700"
+                    >
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {showFolderDropdown && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-2 bg-slate-800 border border-slate-600 rounded-xl shadow-xl max-h-60 overflow-y-auto overflow-hidden"
+                      >
+                        {!targetFolderForUpload && (
+                          <div 
+                            className="px-4 py-3 hover:bg-slate-700 cursor-pointer text-gray-300 flex items-center border-b border-slate-700/50 transition"
+                            onClick={() => {
+                              setTargetFolderForUpload('');
+                              setShowFolderDropdown(false);
+                            }}
+                          >
+                            <Archive size={16} className="mr-3 text-indigo-400" />
+                            <span className="font-medium">Uncategorized (Root Folder)</span>
+                          </div>
+                        )}
+                        
+                        {targetFolderForUpload && !folderList.includes(targetFolderForUpload) && (
+                          <div 
+                            className="px-4 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 cursor-pointer text-indigo-300 font-medium flex items-center border-b border-indigo-500/20 transition"
+                            onClick={() => setShowFolderDropdown(false)}
+                          >
+                            <Plus size={16} className="mr-3" />
+                            <span>Create new folder "{targetFolderForUpload}"</span>
+                          </div>
+                        )}
+                        
+                        {folderList
+                          .filter(f => f !== 'Uncategorized')
+                          .filter(f => f.toLowerCase().includes(targetFolderForUpload.toLowerCase()))
+                          .map(folder => (
+                          <div 
+                            key={folder}
+                            className="px-4 py-3 hover:bg-slate-700 cursor-pointer text-white flex items-center transition"
+                            onClick={() => {
+                              setTargetFolderForUpload(folder);
+                              setShowFolderDropdown(false);
+                            }}
+                          >
+                            <Folder size={16} className="mr-3 text-gray-400" />
+                            <span>{folder}</span>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 ml-1">Select an existing folder or type a new name to create one.</p>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => { setShowUploadConfigModal(false); setPendingUploadFiles([]); }}
+                  className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowUploadConfigModal(false);
+                    confirmUpload(pendingUploadFiles, targetFolderForUpload);
+                  }}
+                  className="flex-[2] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-lg shadow-indigo-600/30"
+                >
+                  Start Upload ({pendingUploadFiles.length})
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Upload Confirmation/Progress Modal */}
+      <AnimatePresence>
+        {showUploadModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => !isUploading && setShowUploadModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-md bg-[var(--color-card)] border border-gray-700 p-6 rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold mb-4 flex items-center">
+                <UploadCloud className="mr-2 text-indigo-400" /> Uploading {pendingUploadFiles.length} item{pendingUploadFiles.length !== 1 ? 's' : ''}...
+              </h3>
+              
+              <div className="w-full py-4">
+                <p className="text-sm mb-2 font-medium">Progress... {uploadProgress}%</p>
+                <div className="w-full bg-slate-800 rounded-full h-3 mb-2">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                </div>
+                <p className="text-xs text-gray-400 text-center">Please do not close this window.</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Premium Subscription Modal */}
+      <PremiumModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-2xl z-[200] font-medium border border-emerald-500"
+          >
+            {toastMessage}
           </motion.div>
         )}
       </AnimatePresence>

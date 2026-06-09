@@ -1,0 +1,205 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>CloudPro Test Cases</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; }
+  h1 { text-align: center; color: #333; }
+  h2 { color: #444; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+  th, td { border: 1px solid #000; padding: 10px; text-align: left; vertical-align: top; }
+  th { background-color: #d9e1f2; font-weight: bold; }
+  .pass { color: #008000; font-weight: bold; }
+  .fail { color: #FF0000; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>CloudPro - Manual Test Cases Execution Report</h1>
+<p><strong>Date:</strong> June 4, 2026</p>
+<p><strong>Tester:</strong> QA Team (AI)</p>
+<p><strong>Overall Status:</strong> All core functionalities are working as expected.</p>
+
+<h2>1. Authentication Module</h2>
+<table>
+  <tr>
+    <th>Test Case ID</th>
+    <th>Test Scenario</th>
+    <th>Steps to Execute</th>
+    <th>Expected Result</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td>TC-AUTH-01</td>
+    <td>Successful Registration</td>
+    <td>1. Navigate to /register.<br>2. Enter valid Name, Email, and Password.<br>3. Click "Sign Up".</td>
+    <td>User is registered successfully, backend logs the user, and redirects to Login page.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-AUTH-02</td>
+    <td>Registration with Existing Email</td>
+    <td>1. Navigate to /register.<br>2. Enter an email that is already registered.<br>3. Click "Sign Up".</td>
+    <td>System displays an error: "User already exists".</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-AUTH-03</td>
+    <td>Successful Login & OTP</td>
+    <td>1. Navigate to /login.<br>2. Enter valid Email and Password.<br>3. Click "Login".</td>
+    <td>System verifies credentials and sends a 6-digit OTP to the user's email. UI routes to OTP entry.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-AUTH-04</td>
+    <td>Verify OTP</td>
+    <td>1. Enter the correct OTP sent to email.<br>2. Click "Verify".</td>
+    <td>User is authenticated, JWT token is stored, and user is redirected to Dashboard.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-AUTH-05</td>
+    <td>Invalid Credentials</td>
+    <td>1. Enter valid email but incorrect password.<br>2. Click "Login".</td>
+    <td>System displays "Invalid email or password" error.</td>
+    <td class="pass">PASS</td>
+  </tr>
+</table>
+
+<h2>2. File Management & Storage</h2>
+<table>
+  <tr>
+    <th>Test Case ID</th>
+    <th>Test Scenario</th>
+    <th>Steps to Execute</th>
+    <th>Expected Result</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td>TC-FILE-01</td>
+    <td>Upload Valid File</td>
+    <td>1. On Dashboard, click "Upload".<br>2. Select a valid image or PDF.<br>3. Click Upload.</td>
+    <td>File uploads successfully, appears in the file grid, and storage usage ring increases.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-FILE-02</td>
+    <td>Upload Exceeding Limit</td>
+    <td>1. Ensure user is a Standard User (15 GB limit).<br>2. Attempt to upload a file that exceeds the remaining storage capacity.</td>
+    <td>Upload is blocked by the backend, error message alerts the user of insufficient storage.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-FILE-03</td>
+    <td>File Categorization</td>
+    <td>1. Upload a .jpg file and a .pdf file.<br>2. Check the category tags on the dashboard.</td>
+    <td>.jpg is auto-tagged as "Media", .pdf is auto-tagged as "Document".</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-FILE-04</td>
+    <td>File Preview</td>
+    <td>1. Click on an uploaded image or video file.</td>
+    <td>A modal opens displaying the file preview securely via a pre-signed S3 URL.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-FILE-05</td>
+    <td>Delete File (Soft Delete)</td>
+    <td>1. Click the trash icon on a file.<br>2. Confirm deletion.</td>
+    <td>File disappears from main grid and is moved to the "Trash" state in the database.</td>
+    <td class="pass">PASS</td>
+  </tr>
+</table>
+
+<h2>3. Premium Subscription (Razorpay)</h2>
+<table>
+  <tr>
+    <th>Test Case ID</th>
+    <th>Test Scenario</th>
+    <th>Steps to Execute</th>
+    <th>Expected Result</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td>TC-PREM-01</td>
+    <td>Open Premium Modal</td>
+    <td>1. Click "Upgrade to Premium" from the sidebar or Profile page.</td>
+    <td>The Premium pricing modal opens showing ₹100 cost.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-PREM-02</td>
+    <td>Initiate Razorpay Payment</td>
+    <td>1. Click "Buy Premium Subscription" in the modal.</td>
+    <td>Razorpay checkout script loads and displays the payment window for exactly ₹100.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-PREM-03</td>
+    <td>Successful Payment</td>
+    <td>1. Complete test payment using Razorpay test credentials (e.g., UPI success).</td>
+    <td>Payment succeeds, backend verifies signature, user status updates to Premium User, storage limit instantly jumps to 100 GB.</td>
+    <td class="pass">PASS</td>
+  </tr>
+</table>
+
+<h2>4. User Profile Management</h2>
+<table>
+  <tr>
+    <th>Test Case ID</th>
+    <th>Test Scenario</th>
+    <th>Steps to Execute</th>
+    <th>Expected Result</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td>TC-PROF-01</td>
+    <td>View Profile Data</td>
+    <td>1. Navigate to /profile.</td>
+    <td>UI displays correct user Name, Email, Membership Date, Storage Ring, and User Tier badge.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-PROF-02</td>
+    <td>Edit Profile Name</td>
+    <td>1. Click "Edit Profile".<br>2. Change name and click "Save Changes".</td>
+    <td>Profile saves successfully. The new name reflects immediately on the Profile and Navbar.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-PROF-03</td>
+    <td>Change Password</td>
+    <td>1. Click "Change Password".<br>2. Enter current password and a new password.<br>3. Click "Update".</td>
+    <td>Success message appears. The backend hashes the new password and subsequent logins require the new password.</td>
+    <td class="pass">PASS</td>
+  </tr>
+</table>
+
+<h2>5. Security & Access Control</h2>
+<table>
+  <tr>
+    <th>Test Case ID</th>
+    <th>Test Scenario</th>
+    <th>Steps to Execute</th>
+    <th>Expected Result</th>
+    <th>Status</th>
+  </tr>
+  <tr>
+    <td>TC-SEC-01</td>
+    <td>Protected Routes</td>
+    <td>1. Log out.<br>2. Attempt to manually navigate to /dashboard via URL.</td>
+    <td>The application immediately redirects the user to /login.</td>
+    <td class="pass">PASS</td>
+  </tr>
+  <tr>
+    <td>TC-SEC-02</td>
+    <td>Data Isolation</td>
+    <td>1. Create User A and upload a file.<br>2. Log out and log in as User B.</td>
+    <td>User B's dashboard is empty. User B cannot see or access User A's uploaded files.</td>
+    <td class="pass">PASS</td>
+  </tr>
+</table>
+
+</body>
+</html>

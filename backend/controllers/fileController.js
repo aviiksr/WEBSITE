@@ -5,12 +5,19 @@ const { uploadToS3, deleteFromS3, getS3SignedUrl } = require('../services/s3Serv
 const { categorizeFile } = require('../services/categorizationService');
 const { sendShareNotification } = require('../services/emailService');
 const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
 const uploadFile = async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
   try {
+    const maxStorageBytes = req.user.isPremium ? 100 * 1024 * 1024 * 1024 : 15 * 1024 * 1024 * 1024;
+    if (req.user.usedStorage + req.file.size > maxStorageBytes) {
+      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Storage limit exceeded. Please upgrade to premium.' });
+    }
+
     let fileUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/uploads/${req.file.filename}`;
     
     const s3Url = await uploadToS3(req.file);
@@ -19,7 +26,9 @@ const uploadFile = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    const { category, tags } = await categorizeFile(req.file.originalname, req.file.mimetype);
+    const skipAI = !!req.body.category;
+    const { category: autoCategory, tags } = await categorizeFile(req.file.originalname, req.file.mimetype, skipAI);
+    const category = req.body.category || autoCategory;
 
     const newFile = await File.create({
       originalName: req.file.originalname,
@@ -185,7 +194,8 @@ const renameFile = async (req, res) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    file.originalName = req.body.newName || file.originalName;
+    if (req.body.newName) file.originalName = req.body.newName;
+    if (req.body.category !== undefined) file.category = req.body.category;
     await file.save();
     res.json(file);
   } catch (error) {
@@ -256,4 +266,166 @@ const toggleFavorite = async (req, res) => {
   }
 };
 
-module.exports = { uploadFile, getFiles, downloadFile, deleteFile, getTrashFiles, restoreFile, permanentDeleteFile, renameFile, shareFile, getSharedFile, toggleFavorite };
+const createCategory = async (req, res) => {
+  try {
+    const { categoryName } = req.body;
+    if (!categoryName) return res.status(400).json({ message: 'Category name required' });
+    
+    const user = await User.findById(req.user._id);
+    if (!user.customCategories) {
+      user.customCategories = [];
+    }
+    if (!user.customCategories.includes(categoryName)) {
+      user.customCategories.push(categoryName);
+      await user.save();
+    }
+    res.json({ message: 'Category created', categoryName });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const createTextFile = async (req, res) => {
+  try {
+    const { filename, content, category } = req.body;
+    if (!filename) return res.status(400).json({ message: 'Filename required' });
+
+    const finalFilename = filename.endsWith('.txt') ? filename : `${filename}.txt`;
+    const tempName = `${uuidv4()}-${finalFilename}`;
+    const tempPath = path.join(__dirname, '..', 'uploads', tempName);
+    
+    fs.writeFileSync(tempPath, content || '');
+    const size = fs.statSync(tempPath).size;
+
+    const maxStorageBytes = req.user.isPremium ? 100 * 1024 * 1024 * 1024 : 15 * 1024 * 1024 * 1024;
+    if (req.user.usedStorage + size > maxStorageBytes) {
+      fs.unlinkSync(tempPath);
+      return res.status(400).json({ message: 'Storage limit exceeded. Please upgrade to premium.' });
+    }
+
+    const fileObj = {
+      path: tempPath,
+      filename: tempName,
+      originalname: finalFilename,
+      mimetype: 'text/plain',
+      size
+    };
+
+    let fileUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/uploads/${tempName}`;
+    const s3Url = await uploadToS3(fileObj);
+    if (s3Url) {
+      fileUrl = s3Url;
+      fs.unlinkSync(tempPath);
+    }
+
+    const { category: autoCategory, tags } = await categorizeFile(finalFilename, 'text/plain');
+    const finalCategory = category || autoCategory;
+
+    const newFile = await File.create({
+      originalName: finalFilename,
+      filename: tempName,
+      mimeType: 'text/plain',
+      size,
+      url: fileUrl,
+      category: finalCategory,
+      tags,
+      uploadedBy: req.user._id,
+    });
+
+    await User.findByIdAndUpdate(req.user._id, { $inc: { usedStorage: size } });
+    await Activity.create({ user: req.user._id, actionType: 'UPLOAD', fileId: newFile._id, description: `Created text file: ${finalFilename}` });
+
+    res.status(201).json(newFile);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const bulkDeleteFiles = async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    if (!fileIds || !Array.isArray(fileIds)) return res.status(400).json({ message: 'fileIds array required' });
+    
+    await File.updateMany(
+      { _id: { $in: fileIds }, uploadedBy: req.user._id },
+      { $set: { isDeleted: true } }
+    );
+    await Activity.create({ user: req.user._id, actionType: 'DELETE', description: `Moved ${fileIds.length} files to trash` });
+    res.json({ message: 'Files moved to trash' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const bulkRestoreFiles = async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    if (!fileIds || !Array.isArray(fileIds)) return res.status(400).json({ message: 'fileIds array required' });
+    
+    await File.updateMany(
+      { _id: { $in: fileIds }, uploadedBy: req.user._id },
+      { $set: { isDeleted: false } }
+    );
+    await Activity.create({ user: req.user._id, actionType: 'UPLOAD', description: `Restored ${fileIds.length} files from trash` });
+    res.json({ message: 'Files restored successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const bulkPermanentDeleteFiles = async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    if (!fileIds || !Array.isArray(fileIds)) return res.status(400).json({ message: 'fileIds array required' });
+    
+    const files = await File.find({ _id: { $in: fileIds }, uploadedBy: req.user._id });
+    let totalSizeFreed = 0;
+
+    for (const file of files) {
+      const s3Deleted = await deleteFromS3(file.filename);
+      if (!s3Deleted) {
+        const localPath = `uploads/${file.filename}`;
+        if (fs.existsSync(localPath)) {
+          fs.unlinkSync(localPath);
+        }
+      }
+      totalSizeFreed += file.size;
+    }
+
+    await File.deleteMany({ _id: { $in: fileIds }, uploadedBy: req.user._id });
+    await User.findByIdAndUpdate(req.user._id, { $inc: { usedStorage: -totalSizeFreed } });
+    await Activity.create({ user: req.user._id, actionType: 'DELETE', description: `Permanently deleted ${files.length} files` });
+
+    res.json({ message: 'Files permanently removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const emptyTrash = async (req, res) => {
+  try {
+    const files = await File.find({ uploadedBy: req.user._id, isDeleted: true });
+    let totalSizeFreed = 0;
+
+    for (const file of files) {
+      const s3Deleted = await deleteFromS3(file.filename);
+      if (!s3Deleted) {
+        const localPath = `uploads/${file.filename}`;
+        if (fs.existsSync(localPath)) {
+          fs.unlinkSync(localPath);
+        }
+      }
+      totalSizeFreed += file.size;
+    }
+
+    await File.deleteMany({ uploadedBy: req.user._id, isDeleted: true });
+    await User.findByIdAndUpdate(req.user._id, { $inc: { usedStorage: -totalSizeFreed } });
+    await Activity.create({ user: req.user._id, actionType: 'DELETE', description: `Emptied trash (${files.length} files)` });
+
+    res.json({ message: 'Trash emptied successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { uploadFile, getFiles, downloadFile, deleteFile, getTrashFiles, restoreFile, permanentDeleteFile, renameFile, shareFile, getSharedFile, toggleFavorite, createCategory, createTextFile, bulkDeleteFiles, bulkRestoreFiles, bulkPermanentDeleteFiles, emptyTrash };

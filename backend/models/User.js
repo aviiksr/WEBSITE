@@ -8,6 +8,10 @@ const userSchema = mongoose.Schema({
   usedStorage: { type: Number, default: 0 }, // in bytes
   loginOtp: { type: String },
   loginOtpExpiresAt: { type: Date },
+  isPremium: { type: Boolean, default: false },
+  razorpayOrderId: { type: String },
+  razorpayPaymentId: { type: String },
+  customCategories: [{ type: String }]
 }, { timestamps: true });
 
 userSchema.pre('save', async function () {
