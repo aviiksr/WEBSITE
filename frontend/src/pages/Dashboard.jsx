@@ -487,17 +487,36 @@ const Dashboard = () => {
     return acc;
   }, {});
   
-  // Combine custom categories from user with those from files
   const allCategories = new Set(Object.keys(categoryCount));
   if (user?.customCategories) {
     user.customCategories.forEach(cat => allCategories.add(cat));
   }
   const folderList = Array.from(allCategories).sort();
-  
-  const barChartData = Object.keys(categoryCount).map(key => ({
+
+  const getMediaType = (file) => {
+    const mime = file.mimeType || '';
+    const ext = file.originalName ? file.originalName.split('.').pop().toLowerCase() : '';
+    if (mime.startsWith('video/')) return 'Video';
+    if (mime.startsWith('image/')) return 'Image';
+    if (mime.startsWith('audio/')) return 'Audio';
+    if (mime === 'application/pdf' || ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx', 'csv'].includes(ext)) return 'Document';
+    if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) return 'Archive';
+    return 'Other';
+  };
+
+  const mediaTypeSize = files.reduce((acc, file) => {
+    const type = getMediaType(file);
+    acc[type] = (acc[type] || 0) + (file.size || 0);
+    return acc;
+  }, {});
+
+  const totalFilesSize = Object.values(mediaTypeSize).reduce((a, b) => a + b, 0);
+
+  const barChartData = Object.keys(mediaTypeSize).map(key => ({
     name: key,
-    count: categoryCount[key]
-  }));
+    percentage: totalFilesSize > 0 ? parseFloat(((mediaTypeSize[key] / totalFilesSize) * 100).toFixed(1)) : 0,
+    sizeMB: parseFloat((mediaTypeSize[key] / (1024 * 1024)).toFixed(2))
+  })).sort((a, b) => b.percentage - a.percentage);
 
   const renderPreview = () => {
     if (!previewFile) return null;
@@ -1157,9 +1176,13 @@ const Dashboard = () => {
                     <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                       <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-                      <YAxis stroke="#94A3B8" fontSize={12} allowDecimals={false} />
-                      <RechartsTooltip cursor={{fill: '#334155'}} contentStyle={{ backgroundColor: '#1E293B', border: 'none', borderRadius: '8px' }} />
-                      <Bar dataKey="count" fill="#06B6D4" radius={[4, 4, 0, 0]} />
+                      <YAxis stroke="#94A3B8" fontSize={12} allowDecimals={false} tickFormatter={(value) => `${value}%`} />
+                      <RechartsTooltip 
+                        cursor={{fill: '#334155'}} 
+                        contentStyle={{ backgroundColor: '#1E293B', border: 'none', borderRadius: '8px', color: '#fff' }}
+                        formatter={(value, name, props) => [`${value}% (${props.payload.sizeMB} MB)`, 'Storage']}
+                      />
+                      <Bar dataKey="percentage" fill="#06B6D4" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
