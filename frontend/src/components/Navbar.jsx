@@ -19,9 +19,9 @@ const Navbar = () => {
     <nav className="glass-panel sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b border-slate-800/80">
       <div className="flex items-center space-x-3">
         <button 
-          onClick={() => navigate(-1)} 
+          onClick={() => navigate('/')} 
           className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-slate-700/50 rounded-full transition flex items-center justify-center"
-          title="Go Back"
+          title="Go to Home"
         >
           <ArrowLeft size={20} />
         </button>
