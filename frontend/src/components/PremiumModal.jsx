@@ -34,7 +34,7 @@ const PremiumModal = ({ isOpen, onClose }) => {
       const token = localStorage.getItem('token');
       // 1. Create Order on Backend
       const { data: order } = await axios.post(
-        'http://localhost:5000/api/payment/order',
+        `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/payment/order`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -52,7 +52,7 @@ const PremiumModal = ({ isOpen, onClose }) => {
             // 3. Verify Payment
             const token = localStorage.getItem('token');
             const verifyRes = await axios.post(
-              'http://localhost:5000/api/payment/verify',
+              `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/payment/verify`,
               {
                 razorpayOrderId: response.razorpay_order_id,
                 razorpayPaymentId: response.razorpay_payment_id,
