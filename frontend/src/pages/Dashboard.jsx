@@ -923,6 +923,7 @@ const Dashboard = () => {
                     innerRadius={60}
                     outerRadius={80}
                     paddingAngle={5}
+                    minAngle={15}
                     dataKey="value"
                     stroke="none"
                   >
