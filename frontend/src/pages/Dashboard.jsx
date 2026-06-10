@@ -234,14 +234,8 @@ const Dashboard = () => {
       await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/category`, { categoryName: newFolderName }, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
-      // Update local user object to include new category
-      const updatedUser = { ...user, customCategories: [...(user.customCategories || []), newFolderName] };
-      // Note: we'd ideally use setUser from context, but mutating locally for quick UI update works if we just want it to show
-      if (user.customCategories && !user.customCategories.includes(newFolderName)) {
-        user.customCategories.push(newFolderName);
-      } else if (!user.customCategories) {
-        user.customCategories = [newFolderName];
-      }
+      // Refresh the user profile from the backend to get the new custom category
+      await fetchProfile();
       setShowNewFolderModal(false);
       fetchActivities();
       showToast(`Folder '${newFolderName}' created successfully`);
