@@ -142,6 +142,7 @@ const Dashboard = () => {
     setIsUploading(true);
     setUploadProgress(0);
     let completed = 0;
+    let failed = 0;
     let targetCategory = targetCategoryStr.trim();
     if (targetCategory === 'Uncategorized' || targetCategory === 'Uncategorized (Root)') {
       targetCategory = '';
@@ -189,11 +190,12 @@ const Dashboard = () => {
               }
             }
           });
+          completed++;
         } catch (err) {
-          console.error(err);
+          console.error("Upload failed for file:", file.name, err);
+          failed++;
         }
-        completed++;
-        setUploadProgress(Math.round((completed * 100) / filesToUpload.length));
+        setUploadProgress(Math.round(((completed + failed) * 100) / filesToUpload.length));
       }));
     }
     
@@ -205,9 +207,12 @@ const Dashboard = () => {
       fetchFiles();
       fetchActivities();
       fetchProfile();
-      if (filesToUpload.length > 1) {
-        showToast(`${filesToUpload.length} items uploaded successfully!`);
-      } else {
+      
+      if (failed > 0) {
+        alert(`Failed to upload ${failed} item(s). Please try again or check file sizes.`);
+      } else if (completed > 1) {
+        showToast(`${completed} items uploaded successfully!`);
+      } else if (completed === 1) {
         showToast(`Item uploaded successfully!`);
       }
     }, 500);
