@@ -719,7 +719,7 @@ const Dashboard = () => {
           ))}
         </div>
       )}
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
         {activeTab !== 'trash' ? (
           <>
             <button onClick={() => handleDownloadFile(file)} className="text-gray-400 hover:text-white transition" title="Download">
