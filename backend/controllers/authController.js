@@ -27,7 +27,7 @@ const registerUser = async (req, res) => {
       console.log(`✅ User registered: ${user.email}`);
       await Activity.create({ user: user._id, actionType: 'REGISTER', description: 'Registered a new account' });
       
-      await sendWelcomeEmail(user.email, user.name);
+      sendWelcomeEmail(user.email, user.name).catch(err => console.error('Failed to send welcome email:', err));
 
       res.status(201).json({
         _id: user.id,
@@ -62,9 +62,9 @@ const loginUser = async (req, res) => {
       user.loginOtpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
       await user.save();
 
-      // Dispatch OTP email
+      // Dispatch OTP email asynchronously so it doesn't block login response
       console.log(`\n🔑 [SECURITY OTP] GENERATED FOR ${user.email} -> [ ${otp} ]\n`);
-      await sendOtpEmail(user.email, user.name, otp);
+      sendOtpEmail(user.email, user.name, otp).catch(err => console.error('Failed to send OTP email:', err));
 
       res.status(200).json({
         otpRequired: true,

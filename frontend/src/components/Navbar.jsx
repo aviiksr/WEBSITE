@@ -1,13 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Cloud, LogOut, Info, LifeBuoy, LayoutDashboard, Crown, ArrowLeft } from 'lucide-react';
+import { Cloud, LogOut, Info, LifeBuoy, LayoutDashboard, Crown, ArrowLeft, Menu, X } from 'lucide-react';
 import PremiumModal from './PremiumModal';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -29,7 +30,9 @@ const Navbar = () => {
           <span>CloudPro</span>
         </Link>
       </div>
-      <div className="flex items-center space-x-5">
+      
+      {/* Desktop Navigation */}
+      <div className="hidden lg:flex items-center space-x-5">
         <Link to="/about" className="flex items-center space-x-1.5 text-gray-300 hover:text-indigo-400 transition font-medium hover:scale-102 transform duration-200">
           <Info size={17} className="text-indigo-400/80" />
           <span>About</span>
@@ -87,6 +90,66 @@ const Navbar = () => {
           </>
         )}
       </div>
+
+      {/* Mobile Menu Toggle Button */}
+      <div className="lg:hidden flex items-center">
+        <button 
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+          className="p-2 text-gray-300 hover:text-white transition focus:outline-none"
+        >
+          {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+        </button>
+      </div>
+
+      {/* Mobile Navigation Menu */}
+      {isMobileMenuOpen && (
+        <div className="absolute top-full left-0 right-0 bg-slate-900 border-b border-slate-800 p-4 flex flex-col space-y-4 shadow-xl lg:hidden z-50">
+          <Link to="/about" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center space-x-2 text-gray-300 hover:text-white transition">
+            <Info size={18} />
+            <span>About</span>
+          </Link>
+          <Link to="/support" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center space-x-2 text-gray-300 hover:text-white transition">
+            <LifeBuoy size={18} />
+            <span>Support</span>
+          </Link>
+          {user ? (
+            <>
+              <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center space-x-2 text-gray-300 hover:text-white transition">
+                <LayoutDashboard size={18} />
+                <span>Dashboard</span>
+              </Link>
+              <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center space-x-2 text-gray-300 hover:text-white transition">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white font-bold text-[10px] flex items-center justify-center">
+                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span>Profile</span>
+              </Link>
+              {!user.isPremium && (
+                <button 
+                  onClick={() => { setIsPremiumModalOpen(true); setIsMobileMenuOpen(false); }}
+                  className="flex items-center space-x-2 text-orange-400 hover:text-orange-300 transition"
+                >
+                  <Crown size={18} />
+                  <span>Upgrade to Premium</span>
+                </button>
+              )}
+              <button 
+                onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} 
+                className="flex items-center space-x-2 text-red-400 hover:text-red-300 transition w-full text-left"
+              >
+                <LogOut size={18} />
+                <span>Logout</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col space-y-3 pt-2 border-t border-slate-800">
+              <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition text-center py-2">Login</Link>
+              <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg text-center font-semibold transition">Sign Up</Link>
+            </div>
+          )}
+        </div>
+      )}
+
       <PremiumModal isOpen={isPremiumModalOpen} onClose={() => setIsPremiumModalOpen(false)} />
     </nav>
   );

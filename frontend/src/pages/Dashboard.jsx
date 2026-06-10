@@ -481,6 +481,19 @@ const Dashboard = () => {
     if (!previewFile) return null;
     
     if (previewFile.mimeType.startsWith('image/')) {
+      const ext = previewFile.originalName ? previewFile.originalName.split('.').pop().toLowerCase() : '';
+      if (ext === 'heic' || ext === 'heif' || previewFile.mimeType.includes('heic')) {
+        return (
+          <div className="flex flex-col items-center justify-center h-[40vh] w-full bg-gray-800 rounded-lg p-8">
+            <File size={64} className="text-gray-400 mb-4" />
+            <p className="text-gray-300 text-center mb-2">HEIC images cannot be displayed directly in the browser.</p>
+            <p className="text-gray-400 text-sm text-center mb-6">Please download the file to view it on your device.</p>
+            <a href={previewFile.url} target="_blank" rel="noopener noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg transition font-medium">
+              Download Image
+            </a>
+          </div>
+        );
+      }
       return <img src={previewFile.url} alt={previewFile.originalName} className="max-w-full max-h-[80vh] rounded-lg object-contain" />;
     }
     
@@ -514,6 +527,14 @@ const Dashboard = () => {
     
     // 1. Image Thumbnail
     if (mime.startsWith('image/')) {
+      if (ext === 'heic' || ext === 'heif' || mime.includes('heic')) {
+        return (
+          <div className="relative w-12 h-12 bg-slate-800 rounded-lg shadow-md border border-gray-700 shrink-0 flex flex-col items-center justify-center overflow-hidden select-none">
+            <File size={20} className="text-gray-400 mb-2" />
+            <div className="absolute bottom-0 w-full bg-indigo-600 text-white font-extrabold text-[8px] py-[1px] text-center tracking-tighter">HEIC</div>
+          </div>
+        );
+      }
       return (
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-700 bg-slate-800 flex items-center justify-center shrink-0 shadow-md">
           <img src={file.url} alt={file.originalName} className="w-full h-full object-cover" loading="lazy" />
@@ -772,7 +793,7 @@ const Dashboard = () => {
         
         {/* Sidebar */}
         <aside className="w-full lg:w-1/4 space-y-6">
-          <div className="glass-panel p-6 rounded-2xl sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
+          <div className="glass-panel p-6 rounded-2xl lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
             {/* Menu Bar / Navigation */}
             <div className="mb-6 relative" onClick={(e) => e.stopPropagation()}>
               <button 
