@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import PremiumModal from '../components/PremiumModal';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UploadCloud, File, Trash2, Share2, Download, X, FileText, Video, Music, Code, Archive, Folder, Clock, Users, Star, ArrowLeft, Plus, FolderPlus, ChevronDown, CheckSquare, Square, RefreshCw } from 'lucide-react';
+import { UploadCloud, File, Trash2, Share2, Download, X, FileText, Video, Music, Code, Archive, Folder, Clock, Users, Star, ArrowLeft, Plus, FolderPlus, ChevronDown, CheckSquare, Square, RefreshCw, Send, MessageCircle, Link2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -26,6 +26,9 @@ const Dashboard = () => {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showNewTextModal, setShowNewTextModal] = useState(false);
+  const [shareFileModal, setShareFileModal] = useState(null);
+  const [shareEmailInput, setShareEmailInput] = useState('');
+  const [generatedShareLink, setGeneratedShareLink] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [newFileName, setNewFileName] = useState('');
   const [newFileContent, setNewFileContent] = useState('');
@@ -394,21 +397,41 @@ const Dashboard = () => {
     }
   };
 
-  const handleShare = async (id) => {
-    const recipientEmail = window.prompt("Enter an email address to send this file to directly, or leave blank to just get a shareable link:");
+  const generateShareLink = async (id, recipientEmail = '') => {
     try {
       const payload = recipientEmail ? { recipientEmail } : {};
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'}/api/files/${id}/share`, payload, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
-      const link = `${window.location.origin}/share/${data.shareId}`;
-      navigator.clipboard.writeText(link);
-      alert(data.message + ' (Link copied to clipboard!)');
       fetchFiles();
       fetchActivities();
+      return `${window.location.origin}/share/${data.shareId}`;
     } catch (err) {
       console.error(err);
-      alert('Failed to share file.');
+      alert('Failed to generate share link.');
+      return null;
+    }
+  };
+
+  const executeShare = async (method) => {
+    if (!shareFileModal) return;
+    const link = await generateShareLink(shareFileModal._id, method === 'email' ? shareEmailInput : '');
+    if (!link) return;
+    
+    setGeneratedShareLink(link);
+    const text = encodeURIComponent(`Check out this file I shared via CloudPro: ${shareFileModal.originalName}`);
+    const encodedLink = encodeURIComponent(link);
+
+    if (method === 'whatsapp') {
+      window.open(`https://wa.me/?text=${text}%20${encodedLink}`, '_blank');
+    } else if (method === 'telegram') {
+      window.open(`https://t.me/share/url?url=${encodedLink}&text=${text}`, '_blank');
+    } else if (method === 'copy') {
+      navigator.clipboard.writeText(link);
+      alert('Link copied to clipboard!');
+    } else if (method === 'email') {
+      alert(`File shared successfully with ${shareEmailInput}!`);
+      setShareFileModal(null);
     }
   };
 
@@ -725,7 +748,7 @@ const Dashboard = () => {
             <button onClick={() => handleDownloadFile(file)} className="text-gray-400 hover:text-white transition" title="Download">
               <Download size={18} />
             </button>
-            <button onClick={() => handleShare(file._id)} className="text-gray-400 hover:text-emerald-400 transition" title="Share">
+            <button onClick={() => { setShareFileModal(file); setGeneratedShareLink(''); setShareEmailInput(''); }} className="text-gray-400 hover:text-emerald-400 transition" title="Share">
               <Share2 size={18} />
             </button>
             <button onClick={() => handleFavorite(file._id)} className={`${file.isFavorite ? 'text-amber-400' : 'text-gray-400'} hover:text-amber-300 transition`} title="Favorite">
@@ -1477,6 +1500,91 @@ const Dashboard = () => {
                   <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
                 </div>
                 <p className="text-xs text-gray-400 text-center">Please do not close this window.</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {shareFileModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setShareFileModal(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[var(--color-card)] border border-gray-700 p-6 rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold flex items-center"><Share2 className="mr-2 text-indigo-400" /> Share File</h3>
+                <button onClick={() => setShareFileModal(null)} className="text-gray-400 hover:text-white transition"><X size={20} /></button>
+              </div>
+              <p className="text-sm text-gray-400 mb-6 truncate">Sharing: <span className="font-semibold text-white">{shareFileModal.originalName}</span></p>
+
+              <div className="space-y-4">
+                {/* Email Option */}
+                <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Send via Email</label>
+                  <div className="flex space-x-2">
+                    <input 
+                      type="email" 
+                      placeholder="recipient@example.com"
+                      value={shareEmailInput}
+                      onChange={(e) => setShareEmailInput(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button 
+                      onClick={() => executeShare('email')}
+                      disabled={!shareEmailInput.includes('@')}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition flex items-center"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Direct Link Option */}
+                <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Direct Link</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button 
+                      onClick={() => executeShare('whatsapp')}
+                      className="flex flex-col items-center justify-center p-3 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-xl transition border border-green-500/20"
+                    >
+                      <MessageCircle size={24} className="mb-2" />
+                      <span className="text-xs font-bold">WhatsApp</span>
+                    </button>
+                    
+                    <button 
+                      onClick={() => executeShare('telegram')}
+                      className="flex flex-col items-center justify-center p-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition border border-blue-500/20"
+                    >
+                      <Send size={24} className="mb-2" />
+                      <span className="text-xs font-bold">Telegram</span>
+                    </button>
+
+                    <button 
+                      onClick={() => executeShare('copy')}
+                      className="flex flex-col items-center justify-center p-3 bg-slate-700/50 hover:bg-slate-600 text-white rounded-xl transition border border-slate-600"
+                    >
+                      <Link2 size={24} className="mb-2" />
+                      <span className="text-xs font-bold">Copy Link</span>
+                    </button>
+                  </div>
+                  {generatedShareLink && (
+                    <div className="mt-4 p-2 bg-slate-900 rounded-lg text-xs font-mono text-gray-400 truncate border border-slate-700">
+                      {generatedShareLink}
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>
