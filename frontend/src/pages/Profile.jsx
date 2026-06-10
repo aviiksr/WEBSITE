@@ -85,20 +85,20 @@ const Profile = () => {
               
               <div className="space-y-5">
                 <div className="flex items-center space-x-4 bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
-                  <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+                  <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 shrink-0">
                     <Mail size={20} />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-0.5">Email Address</p>
-                    <p className="font-medium text-lg">{user.email}</p>
+                    <p className="font-medium text-lg break-all">{user.email}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-4 bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
-                  <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400">
+                  <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 shrink-0">
                     <Calendar size={20} />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-0.5">Member Since</p>
                     <p className="font-medium text-lg">
                       {user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}
